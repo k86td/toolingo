@@ -36,21 +36,25 @@ var (
 
 var ErrCsvParse *csv.ParseError
 
-func ParseTransaction(data []string) (Transaction, error) {
+func ParseTransaction(fConf *File, data []string) (Transaction, error) {
 	if len(data) <= 5 && strings.Join(data[1:], "") == "" {
 		return Transaction{}, ErrEmptyString
 	}
 
-	date, err := time.Parse("20060102", strings.TrimSpace(data[2]))
+	date, err := time.Parse(fConf.DateParse, strings.TrimSpace(data[fConf.Date]))
 	if err != nil {
 		return Transaction{}, ErrParseDate
 	}
 
-	price, err := strconv.ParseFloat(strings.TrimSpace(data[3]), 32)
+	price, err := strconv.ParseFloat(strings.TrimSpace(data[fConf.Price]), 32)
 	if err != nil {
 		return Transaction{}, err
 	}
-	description := strings.Join(strings.Fields(data[4]), " ")
+	description := strings.Join(strings.Fields(data[fConf.Description]), " ")
+
+	if fConf.FlipPrice {
+		price = price * -1
+	}
 
 	return Transaction{
 		Date:        date,
@@ -60,18 +64,18 @@ func ParseTransaction(data []string) (Transaction, error) {
 	}, nil
 }
 
-func ReadCsv(conf *ParsedConfig, path, source string) ([]Transaction, []Transaction) {
+func ReadCsv(exactRules, partialRules *map[string]string, fConf *File) ([]Transaction, []Transaction) {
 	var matched []Transaction
 	var unmatched []Transaction
 
-	file, err := os.Open(path)
+	file, err := os.Open(fConf.Path)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
 
-	exactMap := conf.ExactRuleMap
-	partialMap := conf.PartialRuleMap
+	exactMap := *exactRules
+	partialMap := *partialRules
 
 	reader := csv.NewReader(file)
 	for {
@@ -83,13 +87,18 @@ func ReadCsv(conf *ParsedConfig, path, source string) ([]Transaction, []Transact
 			panic(err)
 		}
 
-		tran, err := ParseTransaction(data)
+		tran, err := ParseTransaction(fConf, data)
 		switch err {
 		case ErrEmptyString:
 		case ErrParseDate:
 			continue
 		}
-		tran.Source = source
+		tran.Source = fConf.Account
+
+		// skip empty transactions
+		if tran.Price == 0 && tran.Description == "" {
+			continue
+		}
 
 		if v, ok := exactMap[tran.Description]; ok {
 			tran.Destination = v
