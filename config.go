@@ -33,6 +33,7 @@ type File struct {
 	Date        int
 	Description int
 	Price       int
+	FlipPrice   bool
 }
 
 type ParsedConfig struct {

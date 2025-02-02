@@ -19,6 +19,8 @@
         fava
         python312
         python312Packages.beancount
+        go
+        gopls
       ];
     };
 
